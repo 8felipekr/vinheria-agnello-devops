@@ -1,0 +1,7 @@
+# Zona DNS Interna - Vinheria Agnello (vinheria.local)
+172.28.0.53  dns.vinheria.local dns
+172.28.0.10  gateway.vinheria.local gateway
+172.28.0.20  quality.vinheria.local quality quality-iot-service
+172.28.0.30  notification.vinheria.local notification notification-service
+172.28.0.40  jenkins.vinheria.local jenkins
+172.28.0.50  prod-site.vinheria.local prod-site www.vinheria.local
