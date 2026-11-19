@@ -18,7 +18,7 @@ RUN git config --system --add safe.directory '*'
 
 USER jenkins
 
-ENV JAVA_OPTS="-Djenkins.install.runSetupWizard=false"
+ENV JAVA_OPTS="-Djenkins.install.runSetupWizard=false -Dhudson.plugins.git.GitSCM.ALLOW_LOCAL_CHECKOUT=true"
 
 RUN jenkins-plugin-cli --plugins \
     workflow-aggregator \
