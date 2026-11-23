@@ -4,7 +4,7 @@
 | :--- | :--- |
 | **Aluno** | Felipe Castro Lima |
 | **RM** | rm554976 |
-| **Turma / Grupo** | Turma Online — Grupo 55 |
+| **Turma / Grupo** | Turma Online — Grupo 55 (Fase 7) |
 | **Base Arquitetural** | `FelipeCastroLima_rm554976_TurmaOnline_fase6_atividade.docx` + `Entrega_FIAP_Vinheria_Agnello_Grupo55.zip` |
 | **Repositório GitHub** | [https://github.com/8felipekr/vinheria-agnello-devops](https://github.com/8felipekr/vinheria-agnello-devops) (branch `main`) |
 
@@ -12,7 +12,7 @@
 
 ## 1. Infraestrutura e Serviços Essenciais
 
-### 1.1. Microsserviços Selecionados da Fase 6
+### 1.1. Microsserviços Selecionados do Projeto Anterior (Fase 6)
 
 A partir dos seis microsserviços modelados na Fase 6, foram implementados os dois domínios diretamente integrados à camada IoT do Grupo 55 (ESP32 DevKit V1 + DHT22 no GPIO 4 + LDR no GPIO 34 ADC1):
 
@@ -21,7 +21,7 @@ A partir dos seis microsserviços modelados na Fase 6, foram implementados os do
 
 ### 1.2. Topologia de Rede Docker, DNS Autoritativo e DHCP Dinâmico
 
-Toda a infraestrutura opera na rede bridge isolada `vinheria-net` (`172.28.0.0/24`, interface host dedicada **`br-vinheria`** para captura limpa no Wireshark):
+Toda a infraestrutura opera na rede bridge isolada `vinheria-net` (`172.28.0.0/24`, interface host dedicada **`br-vinheria`** para captura limpa no Wireshark), com o serviço `dnsmasq` atuando como DNS autoritativo da zona `vinheria.local` e servidor DHCP (`172.28.0.100–150`):
 
 ```text
                       HOST (Wireshark na interface br-vinheria)
@@ -75,10 +75,25 @@ Toda a infraestrutura opera na rede bridge isolada `vinheria-net` (`172.28.0.0/2
 
 ## 2. Pipeline de Deploy com Jenkins
 
-### 2.1. Repositório Git e Provisionamento Automatizado
+### 2.1. Fluxo de Deploy Automatizado (CI/CD)
 
-- Repositório Git inicializado na branch `main` contendo os microsserviços (`services/`), suíte de testes unitários (`tests/test_services.py`), `Jenkinsfile` declarativo e infraestrutura como código (`docker-compose.yml`).
-- Container `vinheria-jenkins` (`jenkins/jenkins:lts-jdk21`) provisionado automaticamente via `init.groovy.d/` com usuário `admin`, plugins `workflow-aggregator` e `git`, e job `vinheria-agnello-deploy`.
+O repositório Git (`main`, sincronizado em `https://github.com/8felipekr/vinheria-agnello-devops`) versiona os microsserviços, os testes unitários (`tests/test_services.py`), a infraestrutura Docker (`docker-compose.yml`) e o pipeline declarativo (`Jenkinsfile`). O servidor Jenkins (`jenkins/jenkins:lts-jdk21`) é provisionado via scripts Groovy em `init.groovy.d/` e executa o fluxo abaixo a cada disparo:
+
+```text
+[Repositório Git (main)]
+        │  1. Checkout SCM (revisão e376cae)
+        ▼
+[Stage 2: Build] ──► echo "Deploy da Vinheria" + py_compile + tar.gz versionado
+        │
+        ▼
+[Stage 3: Testes & DevSecOps] ──► unittest (5/5 OK) + bloqueio de .key/.pem + check RS256
+        │
+        ▼
+[Stage 4: Deploy (Simulação IIS)] ──► publica index.html, release.json e artefatos
+        │                             em /var/www/vinheria-agnello (deploy/wwwroot)
+        ▼
+[Stage 5: Smoke Test Pós-Deploy] ──► DNS @172.28.0.53 + HTTP 200 (prod-site) + HTTPS TLS 1.3 (gateway)
+```
 
 ### 2.2. Estágios do `Jenkinsfile` e Evidências da Execução (Build #1 — `SUCCESS`)
 
@@ -127,4 +142,19 @@ Toda a infraestrutura opera na rede bridge isolada `vinheria-net` (`172.28.0.0/2
 
 ![Inspeção do Frame 11 no Wireshark expondo credenciais em texto puro via HTTP](docs/evidencias/05b_wireshark_http_plaintext_vazamento.png)
 
-**Conclusão DevSecOps:** a assinatura digital do JWT (RS256) garante **integridade e autenticidade** (impede forjar papéis ou alterar claims), mas **não fornece confidencialidade** (o payload é apenas Base64URL). Sem criptografia de transporte (TLS 1.3), qualquer agente passivo na rede intercepta as credenciais de login e o próprio Bearer Token válido para reutilizá-los contra a API. A combinação **TLS 1.3 + JWT RS256 + RBAC** mitiga interceptação, adulteração e escalação de privilégios simultaneamente.
+---
+
+## 4. Reflexão Final: Desafios Encontrados e Aprendizados Obtidos
+
+### 4.1. Principais Desafios Técnicos Enfrentados
+
+1. **Coexistência entre DHCP real (`dnsmasq`) e o IPAM do Docker:** ao simular um servidor DHCP dentro de uma rede bridge Docker (`172.28.0.0/24`), foi necessário segmentar explicitamente as faixas (`172.28.0.64/27` para alocação do Docker, IPs fixos `.10–.53` para serviços centrais e `.100–.150` exclusivos para o pool DHCP) e implementar um hook (`dhcp-hook.sh`) para aplicar o IP concedido ao `esp32-sensor-01` sem sobrescrever a rota primária do container.
+2. **Restrições de segurança no Jenkins com repositório Git local:** no primeiro disparo do pipeline, o plugin Git do Jenkins bloqueou o checkout com a proteção `GitSCM.ALLOW_LOCAL_CHECKOUT` (mecanismo contra leitura indevida do filesystem do servidor). A solução exigiu habilitar explicitamente a propriedade controlada via `JAVA_OPTS` no container de laboratório, além de automatizar o provisionamento de plugins e credenciais via `init.groovy.d/` para tornar o ambiente 100% reprodutível.
+3. **Captura limpa de tráfego leste-oeste entre containers no Wireshark:** para evitar interfaces bridge aleatórias (`br-<hash>`) e permissões manuais no host, fixou-se o nome da interface em `br-vinheria` no `docker-compose.yml` e manteve-se cada microsserviço ouvindo simultaneamente em HTTP (inseguro) e HTTPS (seguro), permitindo comparação controlada no mesmo ambiente.
+4. **Gestão segura de certificados e segredos (DevSecOps):** gerar uma CA interna e certificados X.509 com *Subject Alternative Names* (SAN) para cada FQDN (`gateway.vinheria.local`, `quality.vinheria.local`, `notification.vinheria.local`) exigiu garantir que o `.gitignore` e o próprio estágio de DevSecOps do Jenkins bloqueassem o versionamento de qualquer arquivo `.key` ou `.pem` antes da publicação no GitHub.
+
+### 4.2. Aprendizados Obtidos
+
+- **Autenticação (JWT) não substitui criptografia de transporte (TLS):** a análise prática no Wireshark evidenciou que assinar tokens com **RS256** garante integridade e autenticidade (impede forjar papéis ou alterar claims, como testado no ataque `alg=none`), mas não oculta o conteúdo trafegado. Sem **TLS 1.3**, um atacante passivo captura tanto a senha no login (Frame 11) quanto o token `Bearer` válido para reutilização (*replay attack*). Somente a combinação **TLS 1.3 + JWT RS256 + RBAC** protege simultaneamente confidencialidade, integridade e controle de acesso.
+- **Resolução dinâmica (DNS + DHCP) desacopla infraestrutura de código:** configurar os serviços para se comunicarem apenas por FQDNs (`notification.vinheria.local`, `quality.vinheria.local`) e integrar leases DHCP ao DNS reduziu o acoplamento a IPs fixos, aproximando o laboratório da prática real de *Service Discovery* em produção.
+- **Pipelines CI/CD como portão de qualidade e segurança (Shift-Left):** incorporar testes unitários das regras de negócio da adega (Arrhenius, desidratação de rolha e *Goût de Lumière*), checagem de segredos no Git e *smoke tests* pós-deploy dentro do `Jenkinsfile` transformou o deploy de um processo manual sujeito a erros em um fluxo auditável, repetível e seguro.
