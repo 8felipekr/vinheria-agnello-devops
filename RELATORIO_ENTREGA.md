@@ -6,7 +6,7 @@
 | **RM** | rm554976 |
 | **Turma / Grupo** | Turma Online — Grupo 55 |
 | **Base Arquitetural** | `FelipeCastroLima_rm554976_TurmaOnline_fase6_atividade.docx` + `Entrega_FIAP_Vinheria_Agnello_Grupo55.zip` |
-| **Repositório Local** | `/mnt/hd/FIAP/3ESOA/Projetos/vinheria-agnello-infra` (branch `main`) |
+| **Repositório GitHub** | [https://github.com/8felipekr/vinheria-agnello-devops](https://github.com/8felipekr/vinheria-agnello-devops) (branch `main`) |
 
 ---
 
